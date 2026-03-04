@@ -1,0 +1,1340 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Smart Maching – Realidad Aumentada</title>
+
+  <!-- Google Fonts: Rajdhani (display) + DM Sans (body) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;400;500;600;700&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet">
+
+  <!-- AR.js + A-Frame for WebAR -->
+  <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+  <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+
+  <!-- Three.js for UI 3D previews -->
+  <script type="importmap">
+    { "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    }}
+  </script>
+
+  <!-- Spline Viewer -->
+  <script type="module" src="https://unpkg.com/@splinetool/viewer@1.12.60/build/spline-viewer.js"></script>
+<!--ra.css -->
+  <style>
+    :root {
+      --accent: #e8e8e8;
+      --accent-dim: rgba(255,255,255,0.08);
+      --accent-border: rgba(255,255,255,0.2);
+      --accent-glow: rgba(255,255,255,0.04);
+      --bg: #000;
+      --surface: rgba(255,255,255,0.03);
+      --border: rgba(255,255,255,0.07);
+      --text: #e8eaed;
+      --muted: rgba(255,255,255,0.45);
+      --font-display: 'Rajdhani', sans-serif;
+      --font-body: 'DM Sans', sans-serif;
+    }
+
+    *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-body);
+      overflow-x: hidden;
+    }
+
+
+
+    /* ── NAV ── */
+    nav {
+      position: fixed; top:25px; left:50%; transform:translateX(-50%);
+      width:85%; padding:18px 50px;
+      display:flex; justify-content:space-between; align-items:center;
+      background: rgba(255,255,255,0.04); backdrop-filter:blur(24px);
+      border-radius:50px; border:1px solid var(--border);
+      z-index:1000;
+      animation: slideDown .8s cubic-bezier(.22,1,.36,1) both;
+    }
+    @keyframes slideDown { from { opacity:0; transform:translateX(-50%) translateY(-30px);} to { opacity:1; transform:translateX(-50%) translateY(0);} }
+
+    .logo { font-family: var(--font-display); font-weight:600; letter-spacing:3px; font-size:15px; text-decoration:none; color:#fff; }
+    nav ul { display:flex; gap:35px; list-style:none; }
+    nav ul li a { font-family:var(--font-body); text-decoration:none; color:rgba(255,255,255,0.6); font-size:14px; letter-spacing:.5px; transition:color .3s; }
+    nav ul li a:hover, nav ul li a.active { color:#fff; }
+    nav ul li a.active { color: #fff; opacity:1; }
+
+    /* ── HERO ── */
+    .hero {
+      min-height:100vh; display:flex; align-items:center;
+      padding: 120px 8% 80px;
+      position:relative; overflow:hidden;
+    }
+
+    /* Animated grid background */
+    .hero-grid {
+      position:absolute; inset:0; z-index:0;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(200,200,200,0.03) 1px, transparent 1px);
+      background-size: 60px 60px;
+      animation: gridPulse 8s ease-in-out infinite;
+    }
+    @keyframes gridPulse { 0%,100%{opacity:.5} 50%{opacity:1} }
+
+
+    /* Hero Spline wrapper */
+    .hero-spline-wrapper {
+      position:absolute; right:0; top:0; width:48%; height:100%; z-index:0;
+      pointer-events:none; overflow:hidden;
+    }
+    .hero-spline-wrapper spline-viewer.robot-3d {
+      position:absolute;
+      top:50%;
+      left:50%;
+      width:700px;
+      height:700px;
+      transform: translate(-40%, -50%) scale(0.55);
+      transform-origin: center center;
+      display:block;
+    }
+    .spline-cover-bottom {
+      position:absolute; bottom:0; left:0; right:0; height:140px;
+      background:linear-gradient(to top, #000 0%, transparent 100%);
+      pointer-events:none; z-index:2;
+    }
+    .spline-cover-left {
+      position:absolute; top:0; left:0; bottom:0; width:40%;
+      background:linear-gradient(to right, #000 0%, transparent 100%);
+      pointer-events:none; z-index:2;
+    }
+
+    /* Radial vignette */
+    .hero-vignette {
+      position:absolute; inset:0; z-index:1;
+      background: radial-gradient(ellipse 60% 90% at 20% 50%, rgba(0,0,0,.95) 0%, rgba(0,0,0,.7) 40%, rgba(0,0,0,.2) 65%, transparent 80%);
+    }
+
+    /* Floating orbs */
+    .orb {
+      position:absolute; border-radius:50%;
+      filter: blur(80px); opacity:.25; z-index:0;
+      animation: drift 12s ease-in-out infinite;
+    }
+    .orb-1 { width:600px; height:600px; background:radial-gradient(circle, rgba(255,255,255,0.06) 0%, transparent 70%); top:-100px; right:5%; animation-delay:0s; }
+    .orb-2 { width:400px; height:400px; background:radial-gradient(circle, #888888 0%, transparent 70%); bottom:10%; right:30%; animation-delay:-4s; }
+    .orb-3 { width:300px; height:300px; background:radial-gradient(circle, rgba(255,255,255,0.03) 0%, transparent 70%); top:30%; right:15%; animation-delay:-8s; }
+    @keyframes drift { 0%,100%{transform:translate(0,0) scale(1)} 33%{transform:translate(-30px,20px) scale(1.05)} 66%{transform:translate(20px,-15px) scale(.95)} }
+
+    .hero-content { position:relative; z-index:2; max-width:680px; }
+    .hero-eyebrow {
+      display:inline-flex; align-items:center; gap:10px;
+      font-size:11px; letter-spacing:4px; text-transform:uppercase;
+      color: rgba(255,255,255,0.5); opacity:1; margin-bottom:24px;
+      animation: fadeUp .8s .2s both;
+    }
+    .hero-eyebrow::before {
+      content:''; display:block; width:30px; height:1px; background:rgba(255,255,255,0.3);
+    }
+
+    .hero h1 {
+      font-family: var(--font-display);
+      font-size: clamp(52px, 7vw, 90px);
+      font-weight:700;
+      line-height:.95;
+      letter-spacing:3px;
+      text-transform:uppercase;
+      animation: fadeUp .8s .35s both;
+    }
+    .hero h1 .line-dim { font-weight:300; color:rgba(255,255,255,.35); display:block; }
+    .hero h1 .line-accent { color: var(--accent); display:block;
+      text-shadow: 0 0 40px rgba(255,255,255,.2), 0 0 80px rgba(255,255,255,.08); }
+
+    .hero-sub {
+      margin-top:28px; font-size:16px; line-height:1.8;
+      color: var(--muted); max-width:500px;
+      animation: fadeUp .8s .5s both;
+    }
+
+    .hero-actions {
+      margin-top:44px; display:flex; gap:16px; flex-wrap:wrap;
+      animation: fadeUp .8s .65s both;
+    }
+    .btn-primary-hero {
+      display:inline-flex; align-items:center; gap:10px;
+      padding:15px 36px; border-radius:50px;
+      background: linear-gradient(135deg, rgba(255,255,255,.15) 0%, rgba(255,255,255,.06) 100%);
+      border:1px solid var(--accent-border);
+      color:#fff; font-family:var(--font-display); font-size:14px;
+      letter-spacing:2px; text-transform:uppercase; text-decoration:none;
+      transition: all .3s; position:relative; overflow:hidden;
+    }
+    .btn-primary-hero::before {
+      content:''; position:absolute; inset:0;
+      background: linear-gradient(135deg, rgba(255,255,255,.22), transparent);
+      opacity:0; transition:opacity .3s;
+    }
+    .btn-primary-hero:hover { transform:translateY(-2px); box-shadow:0 10px 40px rgba(255,255,255,.15); }
+    .btn-primary-hero:hover::before { opacity:1; }
+
+    .btn-outline-hero {
+      display:inline-flex; align-items:center; gap:10px;
+      padding:15px 36px; border-radius:50px;
+      background:transparent; border:1px solid rgba(255,255,255,.12);
+      color:rgba(255,255,255,.6); font-family:var(--font-display);
+      font-size:14px; letter-spacing:2px; text-transform:uppercase;
+      text-decoration:none; transition:all .3s;
+    }
+    .btn-outline-hero:hover { border-color:rgba(255,255,255,.3); color:#fff; }
+
+    /* Stats strip */
+    .hero-stats {
+      display:flex; gap:48px; margin-top:64px;
+      padding-top:40px; border-top:1px solid var(--border);
+      animation: fadeUp .8s .8s both;
+    }
+    .stat-item { display:flex; flex-direction:column; gap:4px; }
+    .stat-num { font-family:var(--font-display); font-size:36px; font-weight:700; color:#fff; letter-spacing:2px; }
+    .stat-label { font-size:11px; letter-spacing:3px; text-transform:uppercase; color:var(--muted); }
+
+    /* ── AR DEMO SECTION ── */
+    .section-ar-demo {
+      padding: 80px 8%;
+      background: #050505;
+      position:relative;
+    }
+    .section-ar-demo::before {
+      content:''; position:absolute; top:0; left:0; right:0; height:1px;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+    }
+
+    .section-label {
+      font-size:11px; letter-spacing:4px; text-transform:uppercase;
+      color:rgba(255,255,255,0.5); margin-bottom:16px;
+      display:flex; align-items:center; gap:12px;
+    }
+    .section-label::after { content:''; flex:1; height:1px; background:rgba(255,255,255,.08); }
+
+    .section-title {
+      font-family: var(--font-display); font-size:clamp(36px,5vw,56px);
+      font-weight:300; letter-spacing:4px; text-transform:uppercase;
+      margin-bottom:14px; line-height:1;
+    }
+    .section-title strong { font-weight:700; }
+
+    .section-sub { font-size:15px; color:var(--muted); line-height:1.8; max-width:520px; margin-bottom:60px; }
+
+    /* AR experience cards */
+    .ar-grid {
+      display:grid; grid-template-columns:1fr 1fr;
+      gap:2px; border:1px solid var(--border); border-radius:20px; overflow:hidden;
+      margin-bottom:80px;
+    }
+    .ar-panel {
+      background: #080808;
+      padding:48px 40px;
+      position:relative; overflow:hidden;
+      transition:background .4s;
+    }
+    .ar-panel:hover { background:#0d0d0d; }
+    .ar-panel-divider { background: var(--border); }
+    .ar-panel::after {
+      content:''; position:absolute; top:0; left:0; right:0; height:2px;
+      background: linear-gradient(90deg, transparent, var(--accent), transparent);
+      opacity:0; transition:opacity .4s;
+    }
+    .ar-panel:hover::after { opacity:1; }
+
+    .ar-panel-num {
+      font-family:var(--font-display); font-size:72px; font-weight:700;
+      color:rgba(255,255,255,.04); line-height:1;
+      position:absolute; top:20px; right:30px;
+      pointer-events:none;
+    }
+    .ar-panel-icon {
+      width:52px; height:52px; border-radius:14px;
+      background:var(--accent-dim); border:1px solid var(--accent-border);
+      display:flex; align-items:center; justify-content:center;
+      margin-bottom:24px;
+    }
+    .ar-panel-icon svg { width:24px; height:24px; stroke:var(--accent); fill:none; stroke-width:1.5; }
+    .ar-panel h3 {
+      font-family:var(--font-display); font-size:22px; font-weight:600;
+      letter-spacing:2px; text-transform:uppercase; margin-bottom:12px;
+    }
+    .ar-panel p { font-size:14px; color:var(--muted); line-height:1.8; }
+
+    /* ── TOOL SELECTOR + AR LAUNCHER ── */
+    .ar-launcher-section {
+      background:#000;
+      padding:80px 8%;
+      position:relative;
+    }
+    .ar-launcher-section::before {
+      content:'AR'; font-family:var(--font-display); font-size:280px; font-weight:700;
+      color:rgba(200,200,200,.02); position:absolute; top:50%; left:50%;
+      transform:translate(-50%,-50%); pointer-events:none; letter-spacing:40px;
+      white-space:nowrap;
+    }
+
+    .launcher-inner {
+      position:relative; z-index:1;
+      display:grid; grid-template-columns:1fr 1fr; gap:60px; align-items:center;
+    }
+
+    /* Tool picker */
+    .tool-picker { display:flex; flex-direction:column; gap:12px; }
+    .tool-option {
+      display:flex; align-items:center; gap:16px;
+      padding:18px 22px; border-radius:14px;
+      background:var(--surface); border:1px solid var(--border);
+      cursor:pointer; transition:all .3s;
+      position:relative; overflow:hidden;
+    }
+    .tool-option::before {
+      content:''; position:absolute; left:0; top:0; bottom:0; width:3px;
+      background:rgba(255,255,255,0.3); transform:scaleY(0); transition:transform .3s; transform-origin:bottom;
+    }
+    .tool-option:hover, .tool-option.selected {
+      background:rgba(255,255,255,.04);
+      border-color:rgba(255,255,255,.2);
+    }
+    .tool-option.selected::before { transform:scaleY(1); }
+    .tool-option-preview {
+      width:48px; height:48px; border-radius:10px;
+      background:radial-gradient(circle at 40% 40%, #111111, #050505);
+      border:1px solid rgba(255,255,255,.1);
+      flex-shrink:0; overflow:hidden; position:relative;
+    }
+    .tool-option-preview canvas {
+      position:absolute!important; top:0; left:0; width:100%!important; height:100%!important;
+    }
+    .tool-option-info { flex:1; }
+    .tool-option-name { font-family:var(--font-display); font-size:16px; font-weight:600; letter-spacing:1px; margin-bottom:3px; }
+    .tool-option-cat { font-size:11px; letter-spacing:2px; text-transform:uppercase; color:rgba(255,255,255,0.5); }
+    .tool-option-check {
+      width:20px; height:20px; border-radius:50%; border:1px solid rgba(255,255,255,.15);
+      display:flex; align-items:center; justify-content:center;
+      transition:all .3s; flex-shrink:0;
+    }
+    .tool-option.selected .tool-option-check {
+      background:rgba(255,255,255,0.3); border-color:var(--accent);
+    }
+    .tool-option.selected .tool-option-check::after { content:'✓'; font-size:11px; color:#000; }
+
+    /* Preview panel */
+    .preview-panel {
+      background:#050505; border-radius:24px;
+      border:1px solid var(--border);
+      overflow:hidden; position:relative;
+      aspect-ratio:1;
+    }
+    .preview-panel-canvas { width:100%; height:100%; display:block; }
+    .preview-panel-overlay {
+      position:absolute; inset:0; pointer-events:none;
+      background: linear-gradient(135deg, transparent 60%, rgba(0,0,0,.8) 100%);
+    }
+    .preview-panel-info {
+      position:absolute; bottom:24px; left:24px; right:24px;
+    }
+    .preview-panel-info h3 { font-family:var(--font-display); font-size:22px; font-weight:600; letter-spacing:2px; margin-bottom:4px; }
+    .preview-panel-info span { font-size:12px; letter-spacing:2px; text-transform:uppercase; color:rgba(255,255,255,.6); }
+    .preview-controls {
+      position:absolute; top:16px; right:16px; display:flex; gap:8px;
+    }
+    .preview-ctrl-btn {
+      width:36px; height:36px; border-radius:10px;
+      background:rgba(0,0,0,.6); border:1px solid rgba(255,255,255,.1);
+      display:flex; align-items:center; justify-content:center;
+      cursor:pointer; color:rgba(255,255,255,0.5); font-size:14px;
+      transition:all .3s; backdrop-filter:blur(10px);
+    }
+    .preview-ctrl-btn:hover { border-color:var(--accent-border); color:var(--accent); }
+
+    /* AR Launch button */
+    .ar-launch-wrap {
+      margin-top:32px; display:flex; flex-direction:column; gap:16px;
+    }
+    .btn-ar-launch {
+      display:flex; align-items:center; justify-content:center; gap:14px;
+      padding:20px 40px; border-radius:16px;
+      background: linear-gradient(135deg, rgba(255,255,255,.15) 0%, rgba(0,100,200,.15) 100%);
+      border:1px solid var(--accent-border);
+      color:#fff; font-family:var(--font-display);
+      font-size:16px; font-weight:600; letter-spacing:3px; text-transform:uppercase;
+      cursor:pointer; transition:all .4s; position:relative; overflow:hidden;
+      text-decoration:none;
+    }
+    .btn-ar-launch::before {
+      content:''; position:absolute; inset:0;
+      background:linear-gradient(135deg, rgba(255,255,255,.1), transparent);
+      opacity:0; transition:opacity .3s;
+    }
+    .btn-ar-launch:hover { transform:translateY(-3px); box-shadow: 0 20px 60px rgba(255,255,255,.2); }
+    .btn-ar-launch:hover::before { opacity:1; }
+    .btn-ar-launch .pulse-ring {
+      width:24px; height:24px; border-radius:50%;
+      border:2px solid var(--accent); position:relative; flex-shrink:0;
+    }
+    .btn-ar-launch .pulse-ring::after {
+      content:''; position:absolute; inset:-4px; border-radius:50%;
+      border:1px solid rgba(255,255,255,.3);
+      animation:pulseRing 2s ease-out infinite;
+    }
+    @keyframes pulseRing { 0%{transform:scale(1);opacity:1} 100%{transform:scale(1.8);opacity:0} }
+
+    .ar-note {
+      display:flex; align-items:flex-start; gap:12px;
+      padding:14px 18px; border-radius:12px;
+      background:rgba(255,200,0,.04); border:1px solid rgba(255,200,0,.12);
+      font-size:12px; color:rgba(255,220,100,.7); line-height:1.6;
+    }
+    .ar-note-icon { flex-shrink:0; font-size:16px; margin-top:1px; }
+
+    /* ── MARKER SECTION ── */
+    .section-markers {
+      padding:80px 8%;
+      background:#050505;
+      border-top:1px solid var(--border);
+    }
+    .markers-grid {
+      display:grid; grid-template-columns:repeat(3,1fr); gap:24px; margin-top:48px;
+    }
+    .marker-card {
+      background:var(--surface); border:1px solid var(--border);
+      border-radius:20px; overflow:hidden;
+      transition:all .3s;
+    }
+    .marker-card:hover {
+      border-color:rgba(255,255,255,.2);
+      box-shadow:0 10px 40px rgba(0,0,0,.5);
+      transform:translateY(-4px);
+    }
+    .marker-preview {
+      aspect-ratio:1; background:#0a0a0a;
+      display:flex; align-items:center; justify-content:center;
+      position:relative; overflow:hidden;
+    }
+    .marker-preview canvas { position:absolute!important; inset:0; width:100%!important; height:100%!important; }
+    .marker-qr {
+      width:80%; aspect-ratio:1;
+      position:relative; z-index:2; display:grid;
+      grid-template-columns:repeat(7,1fr); gap:3px;
+    }
+    .qr-cell {
+      border-radius:2px;
+      background:rgba(255,255,255,0.3);
+      opacity:0;
+      animation:qrFade .05s both;
+    }
+    .marker-info { padding:20px 22px; }
+    .marker-info h4 { font-family:var(--font-display); font-size:16px; font-weight:600; letter-spacing:1px; margin-bottom:6px; }
+    .marker-info p { font-size:12px; color:var(--muted); line-height:1.7; margin-bottom:14px; }
+    .marker-download {
+      display:inline-flex; align-items:center; gap:8px;
+      font-size:11px; letter-spacing:2px; text-transform:uppercase;
+      color:var(--accent); text-decoration:none; cursor:pointer;
+      transition:opacity .3s;
+    }
+    .marker-download:hover { opacity:.7; }
+    @keyframes qrFade { to{opacity:1} }
+
+    /* ── HOW IT WORKS ── */
+    .section-how {
+      padding:80px 8%;
+      background:linear-gradient(180deg, #000 0%, #060606 100%);
+    }
+    .steps-row {
+      display:grid; grid-template-columns:repeat(4,1fr);
+      gap:0; margin-top:48px; position:relative;
+    }
+    .steps-row::before {
+      content:''; position:absolute; top:28px; left:10%; right:10%;
+      height:1px; background:linear-gradient(90deg, transparent, rgba(255,255,255,0.15) 20%, rgba(255,255,255,0.15) 80%, transparent);
+      pointer-events:none;
+    }
+    .step {
+      display:flex; flex-direction:column; align-items:center;
+      text-align:center; padding:0 24px;
+      position:relative;
+    }
+    .step-num {
+      width:56px; height:56px; border-radius:50%;
+      background:#080808; border:1px solid rgba(255,255,255,.15);
+      display:flex; align-items:center; justify-content:center;
+      font-family:var(--font-display); font-size:20px; font-weight:700;
+      color:var(--accent); margin-bottom:24px; position:relative; z-index:1;
+      transition:all .4s;
+    }
+    .step:hover .step-num {
+      background:rgba(255,255,255,.08); border-color:rgba(255,255,255,.4);
+      box-shadow:0 0 30px rgba(255,255,255,.15);
+    }
+    .step h4 { font-family:var(--font-display); font-size:16px; font-weight:600; letter-spacing:2px; text-transform:uppercase; margin-bottom:10px; }
+    .step p { font-size:13px; color:var(--muted); line-height:1.7; }
+
+    /* ── AR VIEWER (full-screen overlay) ── */
+    #ar-overlay {
+      display:none; position:fixed; inset:0; z-index:5000;
+      background:#000;
+    }
+    #ar-overlay.active { display:flex; flex-direction:column; }
+
+    /* A-Frame scene container */
+    #ar-scene-container { flex:1; position:relative; }
+    #ar-scene-container a-scene {
+      width:100%!important; height:100%!important;
+    }
+
+    /* AR HUD */
+    .ar-hud {
+      position:absolute; inset:0; pointer-events:none; z-index:100;
+    }
+    /* Scanning reticle */
+    .ar-reticle {
+      position:absolute; top:50%; left:50%;
+      transform:translate(-50%,-50%);
+      width:200px; height:200px;
+    }
+    .ar-reticle-corner {
+      position:absolute; width:30px; height:30px;
+      border-color:var(--accent); border-style:solid; opacity:.8;
+    }
+    .arc-tl { top:0; left:0; border-width:2px 0 0 2px; }
+    .arc-tr { top:0; right:0; border-width:2px 2px 0 0; }
+    .arc-bl { bottom:0; left:0; border-width:0 0 2px 2px; }
+    .arc-br { bottom:0; right:0; border-width:0 2px 2px 0; }
+    .ar-reticle-line-h, .ar-reticle-line-v {
+      position:absolute; background:rgba(255,255,255,.15);
+    }
+    .ar-reticle-line-h { top:50%; left:15%; right:15%; height:1px; transform:translateY(-50%); }
+    .ar-reticle-line-v { left:50%; top:15%; bottom:15%; width:1px; transform:translateX(-50%); }
+
+    .ar-status-bar {
+      position:absolute; bottom:0; left:0; right:0;
+      padding:24px 28px; pointer-events:all;
+      background:linear-gradient(to top, rgba(0,0,0,.9) 0%, transparent 100%);
+    }
+    .ar-status-label {
+      font-family:var(--font-display); font-size:13px; letter-spacing:3px;
+      text-transform:uppercase; color:rgba(255,255,255,0.5);
+      margin-bottom:4px; display:flex; align-items:center; gap:8px;
+    }
+    .ar-status-dot { width:6px; height:6px; border-radius:50%; background:rgba(255,255,255,0.3); animation:blink 1.4s ease-in-out infinite; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
+    .ar-tool-name { font-family:var(--font-display); font-size:28px; font-weight:700; letter-spacing:3px; text-transform:uppercase; }
+
+    .ar-top-bar {
+      position:absolute; top:0; left:0; right:0;
+      padding:20px 24px;
+      display:flex; justify-content:space-between; align-items:center; pointer-events:all;
+      background:linear-gradient(to bottom, rgba(0,0,0,.7) 0%, transparent 100%);
+    }
+    .ar-logo { font-family:var(--font-display); font-size:14px; letter-spacing:3px; }
+    .ar-close-btn {
+      width:40px; height:40px; border-radius:50%;
+      background:rgba(255,255,255,.1); border:1px solid rgba(255,255,255,.15);
+      display:flex; align-items:center; justify-content:center;
+      cursor:pointer; transition:all .3s; font-size:18px; color:#fff;
+      backdrop-filter:blur(10px);
+    }
+    .ar-close-btn:hover { background:rgba(255,100,50,.3); border-color:rgba(255,100,50,.5); }
+
+    .ar-controls-panel {
+      position:absolute; right:20px; top:50%; transform:translateY(-50%);
+      display:flex; flex-direction:column; gap:10px; pointer-events:all;
+    }
+    .ar-ctrl {
+      width:44px; height:44px; border-radius:12px;
+      background:rgba(0,0,0,.6); border:1px solid rgba(255,255,255,.12);
+      display:flex; align-items:center; justify-content:center;
+      cursor:pointer; transition:all .3s; font-size:18px;
+      backdrop-filter:blur(10px);
+    }
+    .ar-ctrl:hover { border-color:var(--accent-border); background:rgba(255,255,255,.08); }
+
+    /* ── FOOTER ── */
+    .main-footer {
+      border-top:1px solid #1a1a1a; padding:60px 10% 0;
+      color:#e7e7e7; margin-top:80px;
+    }
+    .footer-container {
+      display:grid; grid-template-columns:2fr 1fr 1fr 1fr;
+      gap:40px; padding-bottom:50px;
+    }
+    .footer-col h2 { font-family:var(--font-display); font-size:1.2rem; font-weight:300; letter-spacing:.15rem; margin-bottom:16px; color:#fff; }
+    .footer-col h3 { font-size:.85rem; font-weight:500; letter-spacing:.12rem; text-transform:uppercase; color:#474747; margin-bottom:18px; }
+    .footer-col p { font-size:.85rem; color:gray; line-height:1.7; max-width:280px; margin-bottom:20px; }
+    .footer-col ul { list-style:none; display:flex; flex-direction:column; gap:12px; }
+    .footer-col ul li a { font-size:.9rem; color:gray; text-decoration:none; letter-spacing:.05rem; transition:color .2s ease; position:relative; }
+    .footer-col ul li a::before { content:'→'; position:absolute; left:-20px; opacity:0; transition:all .3s ease; }
+    .footer-col ul li a:hover { color:#e7e7e7; padding-left:20px; }
+    .footer-col ul li a:hover::before { opacity:1; left:0; }
+    .socials { display:flex; gap:16px; }
+    .socials a { font-size:.8rem; color:#474747; text-decoration:none; border:1px solid #2a2a2a; padding:5px 14px; border-radius:50px; letter-spacing:.08rem; transition:color .2s,border-color .2s; }
+    .socials a:hover { color:#e7e7e7; border-color:#555; }
+    .footer-bottom { border-top:1px solid #1a1a1a; padding:20px 0; text-align:center; font-size:.8rem; color:#333; letter-spacing:.05rem; }
+
+    /* ── UTILITY ANIMATIONS ── */
+    @keyframes fadeUp { from{opacity:0;transform:translateY(30px)} to{opacity:1;transform:translateY(0)} }
+
+    /* Scrolled-into-view animations */
+    .reveal { opacity:0; transform:translateY(40px); transition:opacity .8s ease, transform .8s ease; }
+    .reveal.visible { opacity:1; transform:none; }
+
+    /* ── RESPONSIVE ── */
+    @media(max-width:900px){
+      nav { width:94%; padding:14px 24px; }
+      .hero { padding:100px 6% 60px; }
+      .hero h1 { font-size:52px; }
+      .ar-grid { grid-template-columns:1fr; }
+      .launcher-inner { grid-template-columns:1fr; }
+      .markers-grid { grid-template-columns:1fr 1fr; }
+      .steps-row { grid-template-columns:1fr 1fr; gap:32px; }
+      .steps-row::before { display:none; }
+      .footer-container { grid-template-columns:1fr 1fr; }
+      .hero-stats { gap:28px; }
+    }
+    @media(max-width:600px){
+      .markers-grid { grid-template-columns:1fr; }
+      .steps-row { grid-template-columns:1fr; }
+      .footer-container { grid-template-columns:1fr; }
+      nav ul { display:none; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <a class="logo" href="../index.html">SMART MACHING</a>
+  <ul>
+    <li><a href="../index.html">Inicio</a></li>
+    <li><a href="../php/catalogo.php">Herramientas</a></li>
+    <li><a href="chatbot.html">Chatbot IA</a></li>
+    <li><a href="ra.html" class="active">Realidad Aumentada</a></li>
+  </ul>
+</nav>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-grid"></div>
+  <div class="hero-vignette"></div>
+  <div class="orb orb-1"></div>
+  <div class="orb orb-2"></div>
+  <div class="orb orb-3"></div>
+
+  <div class="hero-content">
+    <div class="hero-eyebrow">SMART - MACHING</div>
+    <h1>
+      <span class="line-dim">VISUALIZA EN</span>
+      <span class="line-accent">REALIDAD</span>
+      <span style="font-weight:700; display:block; letter-spacing:3px;">AUMENTADA</span>
+    </h1>
+    <p class="hero-sub">
+      Apunta tu cámara hacia cualquier superficie plana y proyecta modelos 3D de nuestras herramientas de mecanizado a escala real. Sin apps. Sin descargas.
+    </p>
+    <div class="hero-actions">
+      <a href="#lanzar-ar" class="btn-primary-hero">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M3 9a9 9 0 0 1 9-6 9 9 0 0 1 6 2.3M21 15a9 9 0 0 1-9 6 9 9 0 0 1-6-2.3"/><path d="m3 3 18 18"/></svg>
+        Iniciar AR
+      </a>
+      <a href="#como-funciona" class="btn-outline-hero">¿Cómo funciona?</a>
+    </div>
+    <div class="hero-stats">
+      <div class="stat-item"><span class="stat-num">10000</span><span class="stat-label">Herramientas 3D</span></div>
+      <div class="stat-item"><span class="stat-num">0</span><span class="stat-label">Apps necesarias</span></div>
+      <div class="stat-item"><span class="stat-num">1:1</span><span class="stat-label">Escala real</span></div>
+    </div>
+  </div>
+
+  <!-- Spline 3D model 
+   <div class="spline-wrapper">
+   <spline-viewer class="robot-3d" url="https://prod.spline.design/K9dLJ2b-ZmEn8pXp/scene.splinecode"></spline-viewer>
+    <div class="spline-cover"></div>
+  </div>-->
+  
+  </div>
+</div>
+
+<!-- AR FEATURES -->
+<section class="section-ar-demo reveal">
+  <div class="section-label">Capacidades</div>
+  <h2 class="section-title">Tecnología <strong>WebAR</strong></h2>
+  <p class="section-sub">Experiencia inmersiva directo desde tu navegador. Sin plugins, sin descargas, solo apunta y visualiza.</p>
+
+  <div class="ar-grid">
+    <div class="ar-panel">
+      <div class="ar-panel-num">01</div>
+      <div class="ar-panel-icon">
+        <svg viewBox="0 0 24 24"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+      </div>
+      <h3>Modelos 3D de Alta Fidelidad</h3>
+      <p>Cada herramienta está renderizada con materiales PBR (Physically Based Rendering) que simulan metal, recubrimientos y geometría real.</p>
+    </div>
+    <div class="ar-panel">
+      <div class="ar-panel-num">02</div>
+      <div class="ar-panel-icon">
+        <svg viewBox="0 0 24 24"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      </div>
+      <h3>Detección de Superficie</h3>
+      <p>Tecnología de estimación de profundidad para posicionar herramientas sobre mesas, bancos de trabajo o suelos de taller en tiempo real.</p>
+    </div>
+    <div class="ar-panel" style="border-top:1px solid var(--border)">
+      <div class="ar-panel-num">03</div>
+      <div class="ar-panel-icon">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+      </div>
+      <h3>Escala 1:1 Real</h3>
+      <p>Visualiza exactamente qué tan grande es la fresa o broca antes de adquirirla. Métricas reales proyectadas en tu espacio físico.</p>
+    </div>
+    <div class="ar-panel" style="border-top:1px solid var(--border)">
+      <div class="ar-panel-num">04</div>
+      <div class="ar-panel-icon">
+        <svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+      </div>
+      <h3>Multiplataforma</h3>
+      <p>Compatible con iOS Safari, Android Chrome y cualquier navegador moderno. WebXR nativo o fallback con cámara web estándar.</p>
+    </div>
+  </div>
+</section>
+
+<!-- AR LAUNCHER -->
+<section class="ar-launcher-section reveal" id="lanzar-ar">
+  <div class="launcher-inner">
+    <!-- Left: tool picker -->
+    <div>
+      <div class="section-label">Seleccionar Herramienta</div>
+      <h2 class="section-title" style="margin-bottom:10px;">Elige tu <strong>modelo</strong></h2>
+      <p style="font-size:14px;color:var(--muted);margin-bottom:28px;line-height:1.8;">Selecciona la herramienta que deseas visualizar en Realidad Aumentada.</p>
+
+      <div class="tool-picker" id="toolPicker">
+        <!-- Populated by JS -->
+      </div>
+
+      <div class="ar-launch-wrap">
+        <button class="btn-ar-launch" id="launchArBtn" onclick="launchAR()">
+          <span class="pulse-ring"></span>
+          INICIAR REALIDAD AUMENTADA
+        </button>
+        <div class="ar-note">
+          <span class="ar-note-icon">⚡</span>
+          <span>El visor 3D se abre con fondo negro. Arrastra para rotar el modelo, usa + / − para escalar y ↻ para girar 90°.</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: 3D preview -->
+    <div class="preview-panel">
+      <canvas id="previewCanvas" class="preview-panel-canvas"></canvas>
+      <div class="preview-panel-overlay"></div>
+      <div class="preview-controls">
+        <button class="preview-ctrl-btn" onclick="rotatePreview(-1)" title="Rotar izquierda">◁</button>
+        <button class="preview-ctrl-btn" onclick="resetPreviewRotation()" title="Centrar">◎</button>
+        <button class="preview-ctrl-btn" onclick="rotatePreview(1)" title="Rotar derecha">▷</button>
+      </div>
+      <div class="preview-panel-info">
+        <h3 id="previewName">Fresa de Carburo 4 Flautas</h3>
+        <span id="previewCat">Fresas</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- MARKERS -->
+<section class="section-markers reveal" id="marcadores">
+  <div class="section-label">Marcadores AR</div>
+  <h2 class="section-title">Imprime tus <strong>marcadores</strong></h2>
+  <p class="section-sub">Para experiencias AR con marcador, imprime estos patrones y apunta la cámara sobre ellos para activar cada herramienta.</p>
+
+  <div class="markers-grid" id="markersGrid">
+    <!-- Populated by JS -->
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section class="section-how reveal" id="como-funciona">
+  <div class="section-label">Proceso</div>
+  <h2 class="section-title">¿Cómo <strong>funciona</strong>?</h2>
+
+  <div class="steps-row">
+    <div class="step">
+      <div class="step-num">01</div>
+      <h4>Selecciona</h4>
+      <p>Elige la herramienta que deseas visualizar desde nuestro catálogo de modelos 3D.</p>
+    </div>
+    <div class="step">
+      <div class="step-num">02</div>
+      <h4>Permite</h4>
+      <p>Autoriza el acceso a tu cámara cuando el navegador lo solicite.</p>
+    </div>
+    <div class="step">
+      <div class="step-num">03</div>
+      <h4>Apunta</h4>
+      <p>Dirige la cámara hacia una superficie plana o usa un marcador impreso.</p>
+    </div>
+    <div class="step">
+      <div class="step-num">04</div>
+      <h4>Visualiza</h4>
+      <p>El modelo 3D aparece en tu espacio a escala real. Muévete alrededor.</p>
+    </div>
+  </div>
+</section>
+
+<!-- AR OVERLAY (full-screen experience) -->
+<div id="ar-overlay">
+  <div id="ar-scene-container">
+    <!-- A-Frame scene injected by JS -->
+  </div>
+
+  <!-- HUD -->
+  <div class="ar-hud">
+    <div class="ar-top-bar">
+      <span class="ar-logo">SMART MACHING — AR</span>
+      <button class="ar-close-btn" onclick="closeAR()">✕</button>
+    </div>
+
+    <div class="ar-reticle">
+      <div class="ar-reticle-corner arc-tl"></div>
+      <div class="ar-reticle-corner arc-tr"></div>
+      <div class="ar-reticle-corner arc-bl"></div>
+      <div class="ar-reticle-corner arc-br"></div>
+      <div class="ar-reticle-line-h"></div>
+      <div class="ar-reticle-line-v"></div>
+    </div>
+
+    <div class="ar-controls-panel">
+      <div class="ar-ctrl" onclick="arScaleUp()" title="Escalar +">＋</div>
+      <div class="ar-ctrl" onclick="arScaleDown()" title="Escalar −">－</div>
+      <div class="ar-ctrl" onclick="arRotate()" title="Rotar">↻</div>
+    </div>
+
+    <div class="ar-status-bar">
+      <div class="ar-status-label"><span class="ar-status-dot"></span>AR ACTIVO</div>
+      <div class="ar-tool-name" id="arToolName">Fresa de Carburo 4 Flautas</div>
+    </div>
+  </div>
+</div>
+
+<!-- FOOTER -->
+<footer class="main-footer">
+  <div class="footer-container">
+    <div class="footer-col logo-col">
+      <h2>SMART MACHING</h2>
+      <p>Transformamos la producción con tecnología de vanguardia. Desde herramientas inteligentes hasta realidad aumentada, llevamos el mecanizado al futuro.</p>
+      <div class="socials">
+        <a href="#">LinkedIn</a>
+        <a href="#">Facebook</a>
+        <a href="#">Instagram</a>
+      </div>
+    </div>
+    <div class="footer-col">
+      <h3>Empresa</h3>
+      <ul><li><a href="#">Sobre Nosotros</a></li><li><a href="#">Servicios</a></li><li><a href="#">Partners</a></li><li><a href="#">Contacto</a></li></ul>
+    </div>
+    <div class="footer-col">
+      <h3>Soluciones</h3>
+      <ul><li><a href="catalogo.html">Catálogo</a></li><li><a href="#">Asistencia IA</a></li><li><a href="#">Realidad Aumentada</a></li><li><a href="#">Modelado 3D</a></li></ul>
+    </div>
+    <div class="footer-col">
+      <h3>Soporte</h3>
+      <ul><li><a href="#">FAQ</a></li><li><a href="#">Términos y Condiciones</a></li><li><a href="#">Política de Privacidad</a></li><li><a href="#">Ayuda Técnica</a></li></ul>
+    </div>
+  </div>
+  <div class="footer-bottom">© 2026 Smart Maching. Todos los derechos reservados.</div>
+</footer>
+
+<!-- THREE.JS for previews -->
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+/* ── TOOL DATA ── */
+window.TOOLS = [
+  { id:0, name:'Fresa de Carburo 4 Flautas', cat:'Fresas',   ref:'SM-FR-001', desc:'Fresa de carburo sólido 4 flautas, Ø10mm, recubrimiento AlTiN.' },
+  { id:1, name:'Broca HSS Ø10mm',            cat:'Brocas',   ref:'SM-BR-010', desc:'Broca HSS-TiN para perforación precisa, DIN 338.' },
+  { id:2, name:'Inserto CCMT 09T304',         cat:'Insertos', ref:'SM-IN-304', desc:'Inserto CVD para torneado de acabado en acero inox.' },
+  { id:3, name:'Portaherramientas VDI 40',    cat:'Tornos',   ref:'SM-TO-040', desc:'Portaherramientas estático VDI 40, acero bonificado.' },
+  { id:4, name:'Mandril BT40 ER32',           cat:'CNC',      ref:'SM-CM-BT40', desc:'Mandril ER32 / BT40 para centros de mecanizado, runout < 0.003mm.' },
+  { id:5, name:'Fresa de Bola Ø6mm',          cat:'Fresas',   ref:'SM-FR-B06', desc:'Fresa de bola carburo micrograno TiAlN, Ø6mm R3.' },
+];
+
+window.selectedTool = 0;
+
+/* ── BUILD GEOMETRY ── */
+function buildGeometry(cat) {
+  const g = new THREE.Group();
+  switch(cat) {
+    case 'Fresas': {
+      const body = new THREE.Mesh(
+        new THREE.CylinderGeometry(.18,.18,1.8,32),
+        new THREE.MeshStandardMaterial({color:0xb0b0b0,metalness:.95,roughness:.05})
+      ); g.add(body);
+      for(let f=0;f<4;f++){
+        const fl=new THREE.Mesh(new THREE.CylinderGeometry(.02,.02,1.2,8),
+          new THREE.MeshStandardMaterial({color:0xd0d0d0,emissive:0x151515,metalness:.8,roughness:.2}));
+        fl.position.set(Math.cos(f*Math.PI/2)*.18,-.3,Math.sin(f*Math.PI/2)*.18);
+        fl.rotation.z=.3; g.add(fl);
+      }
+      const tip=new THREE.Mesh(new THREE.CylinderGeometry(.18,.22,.4,32),
+        new THREE.MeshStandardMaterial({color:0x555,metalness:.95,roughness:.05}));
+      tip.position.y=-1.1; g.add(tip);
+      break;
+    }
+    case 'Brocas': {
+      g.add(new THREE.Mesh(new THREE.CylinderGeometry(.1,.1,2.2,16),
+        new THREE.MeshStandardMaterial({color:0xaaaaaa,metalness:.9,roughness:.1})));
+      const pts=[];
+      for(let i=0;i<=40;i++){const t=(i/40)*Math.PI*4;pts.push(new THREE.Vector3(Math.cos(t)*.12,(i/40)*1.6-.8,Math.sin(t)*.12));}
+      g.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),80,.015,8,false),
+        new THREE.MeshStandardMaterial({color:0xd0d0d0,emissive:0x0d0d0d,metalness:.7,roughness:.3})));
+      const pt=new THREE.Mesh(new THREE.ConeGeometry(.1,.45,16),
+        new THREE.MeshStandardMaterial({color:0x999999,metalness:.95,roughness:.05}));
+      pt.position.y=-1.32; g.add(pt);
+      break;
+    }
+    case 'Insertos': {
+      const sh=new THREE.Shape(); const s=.5;
+      sh.moveTo(-s,-.3);sh.lineTo(s,-.3);sh.lineTo(s*1.2,.2);sh.lineTo(s,s*.8);sh.lineTo(-s,s*.8);sh.lineTo(-s*1.2,.2);sh.closePath();
+      const m=new THREE.Mesh(new THREE.ExtrudeGeometry(sh,{depth:.22,bevelEnabled:true,bevelSize:.04,bevelThickness:.04,bevelSegments:3}),
+        new THREE.MeshStandardMaterial({color:0x334455,metalness:.85,roughness:.15}));
+      m.position.z=-.11;
+      const glow=new THREE.Mesh(new THREE.ExtrudeGeometry(sh,{depth:.01,bevelEnabled:false}),
+        new THREE.MeshStandardMaterial({color:0xd0d0d0,emissive:0x111111,transparent:true,opacity:.5}));
+      glow.position.z=.12; g.add(m); g.add(glow);
+      break;
+    }
+    case 'Tornos': {
+      g.add(new THREE.Mesh(new THREE.BoxGeometry(.7,.65,1.6),
+        new THREE.MeshStandardMaterial({color:0x445566,metalness:.8,roughness:.2})));
+      const shim=new THREE.Mesh(new THREE.BoxGeometry(.3,.08,.8),
+        new THREE.MeshStandardMaterial({color:0xd0d0d0,emissive:0x111111,metalness:.6,roughness:.3}));
+      shim.position.y=.37; g.add(shim);
+      const tp=new THREE.Mesh(new THREE.ConeGeometry(.14,.5,16),
+        new THREE.MeshStandardMaterial({color:0xcccccc,metalness:.95,roughness:.05}));
+      tp.rotation.z=Math.PI/2; tp.position.x=.85; g.add(tp);
+      break;
+    }
+    case 'CNC': {
+      g.add(new THREE.Mesh(new THREE.CylinderGeometry(.3,.35,.9,6),
+        new THREE.MeshStandardMaterial({color:0x556677,metalness:.85,roughness:.15})));
+      const ring2=new THREE.Mesh(new THREE.TorusGeometry(.32,.04,16,32),
+        new THREE.MeshStandardMaterial({color:0xd0d0d0,emissive:0x151515,metalness:.7,roughness:.2}));
+      ring2.position.y=.3; g.add(ring2);
+      const shank=new THREE.Mesh(new THREE.CylinderGeometry(.12,.12,.8,16),
+        new THREE.MeshStandardMaterial({color:0x888,metalness:.9,roughness:.1}));
+      shank.position.y=-.85; g.add(shank);
+      break;
+    }
+    default:
+      g.add(new THREE.Mesh(new THREE.TorusKnotGeometry(.45,.13,128,16),
+        new THREE.MeshStandardMaterial({color:0xd0d0d0,metalness:.7,roughness:.2,emissive:0x0d0d0d})));
+  }
+  return g;
+}
+
+/* ── MAIN PREVIEW SCENE ── */
+let previewRenderer, previewScene, previewCamera, previewControls, previewTool, previewRing, previewRAF;
+let previewRotDir = 0;
+
+function initPreviewScene() {
+  const canvas = document.getElementById('previewCanvas');
+  if(!canvas) return;
+  const W = canvas.parentElement.offsetWidth || 400;
+  const H = canvas.parentElement.offsetHeight || 400;
+
+  previewRenderer = new THREE.WebGLRenderer({canvas, antialias:true, alpha:true});
+  previewRenderer.setSize(W, H);
+  previewRenderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  previewRenderer.outputColorSpace = THREE.SRGBColorSpace;
+  previewRenderer.toneMapping = THREE.ACESFilmicToneMapping;
+  previewRenderer.toneMappingExposure = 1.5;
+
+  previewScene = new THREE.Scene();
+  previewCamera = new THREE.PerspectiveCamera(42, W/H, .1, 100);
+  previewCamera.position.set(0,.8,4);
+
+  previewScene.add(new THREE.AmbientLight(0xffffff,.25));
+  const key = new THREE.DirectionalLight(0xffffff, 3); key.position.set(3,5,4); previewScene.add(key);
+  const fill = new THREE.DirectionalLight(0xffffff,.8); fill.position.set(-4,1,-3); previewScene.add(fill);
+  const rim = new THREE.PointLight(0xaaaaaa,2,10); rim.position.set(-2,2,3); previewScene.add(rim);
+
+  // Floor glow
+  const floor = new THREE.Mesh(new THREE.CircleGeometry(4,64),
+    new THREE.MeshStandardMaterial({color:0x080808,metalness:.9,roughness:.2}));
+  floor.rotation.x=-Math.PI/2; floor.position.y=-1.6; previewScene.add(floor);
+
+  previewRing = new THREE.Mesh(new THREE.TorusGeometry(1.2,.012,8,64),
+    new THREE.MeshStandardMaterial({color:0xaaaaaa,emissive:0x111111,transparent:true,opacity:.6}));
+  previewRing.rotation.x=-Math.PI/2; previewRing.position.y=-1.58; previewScene.add(previewRing);
+
+  // Particles
+  const pArr=[];
+  for(let i=0;i<80;i++) pArr.push((Math.random()-.5)*8,(Math.random()-.5)*8,(Math.random()-.5)*8);
+  const pg = new THREE.BufferGeometry();
+  pg.setAttribute('position', new THREE.Float32BufferAttribute(pArr,3));
+  previewScene.add(new THREE.Points(pg, new THREE.PointsMaterial({color:0x888888,size:.018,transparent:true,opacity:.3})));
+
+  previewControls = new OrbitControls(previewCamera, previewRenderer.domElement);
+  previewControls.enableDamping = true;
+  previewControls.dampingFactor = .06;
+  previewControls.autoRotate = true;
+  previewControls.autoRotateSpeed = 1.5;
+  previewControls.enableZoom = true;
+  previewControls.minDistance = 2;
+  previewControls.maxDistance = 8;
+
+  loadToolIntoPreview(window.selectedTool);
+
+  (function loop(){
+    previewRAF = requestAnimationFrame(loop);
+    if(previewRotDir !== 0 && previewTool) previewTool.rotation.y += previewRotDir * .04;
+    previewRing.rotation.z += .002;
+    previewControls.update();
+    previewRenderer.render(previewScene, previewCamera);
+  })();
+}
+
+function loadToolIntoPreview(idx) {
+  if(previewTool) previewScene.remove(previewTool);
+  const tool = TOOLS[idx];
+  previewTool = buildGeometry(tool.cat);
+  previewScene.add(previewTool);
+  document.getElementById('previewName').textContent = tool.name;
+  document.getElementById('previewCat').textContent = tool.cat;
+}
+
+window.rotatePreview = function(dir) { previewRotDir = dir; setTimeout(()=>previewRotDir=0, 800); }
+window.resetPreviewRotation = function() { if(previewTool){previewTool.rotation.set(0,0,0);} previewControls.reset(); }
+
+/* ── THUMBNAIL SCENES ── */
+const thumbInstances = {};
+
+function buildThumbScene(canvasEl, cat) {
+  if(!canvasEl) return;
+  const W = 48, H = 48;
+  const renderer = new THREE.WebGLRenderer({canvas:canvasEl, antialias:true, alpha:true});
+  renderer.setSize(W, H); renderer.setPixelRatio(1);
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(60, 1, .1, 50);
+  camera.position.set(0,.3,2.8);
+
+  scene.add(new THREE.AmbientLight(0xffffff,.4));
+  const d = new THREE.DirectionalLight(0xffffff,3); d.position.set(2,3,2); scene.add(d);
+
+  const tool = buildGeometry(cat); tool.scale.setScalar(.5); scene.add(tool);
+
+  let f;
+  (function loop(){ f=requestAnimationFrame(loop); tool.rotation.y+=.02; renderer.render(scene,camera); })();
+  return f;
+}
+
+/* ── POPULATE TOOL PICKER ── */
+function populateToolPicker() {
+  const picker = document.getElementById('toolPicker');
+  picker.innerHTML = '';
+  TOOLS.forEach((t,i) => {
+    const el = document.createElement('div');
+    el.className = 'tool-option' + (i===0?' selected':'');
+    el.innerHTML = `
+      <div class="tool-option-preview"><canvas id="thumb-${i}"></canvas></div>
+      <div class="tool-option-info">
+        <div class="tool-option-name">${t.name}</div>
+        <div class="tool-option-cat">${t.cat} · ${t.ref}</div>
+      </div>
+      <div class="tool-option-check"></div>
+    `;
+    el.addEventListener('click', () => {
+      document.querySelectorAll('.tool-option').forEach(x=>x.classList.remove('selected'));
+      el.classList.add('selected');
+      window.selectedTool = i;
+      loadToolIntoPreview(i);
+      document.getElementById('arToolName').textContent = t.name;
+    });
+    picker.appendChild(el);
+
+    // Build thumb after DOM insert
+    setTimeout(()=>{
+      const c = document.getElementById(`thumb-${i}`);
+      if(c) thumbInstances[i] = buildThumbScene(c, t.cat);
+    }, 100 + i*80);
+  });
+}
+
+/* ── POPULATE MARKERS ── */
+function populateMarkers() {
+  const grid = document.getElementById('markersGrid');
+  const markerPatterns = [
+    { bits:[0,1,1,1,0,1,0,1,0,1,0,0,0,0,1,0,1,1,0,1,0,1,0,1,0,0,0,1,1,0,0,0,1,0,0,0,0,1,0,0,1,1,1,1,0,1,0,1,0] },
+    { bits:[1,1,1,0,0,1,0,0,1,0,1,0,0,1,0,0,0,1,1,0,1,0,0,1,0,1,1,0,0,1,0,1,0,1,0,0,1,0,1,1,0,0,1,0,1,1,1,0,1] },
+    { bits:[0,1,0,1,1,0,1,0,0,0,1,1,0,1,0,0,0,0,1,0,1,1,1,0,0,0,1,0,0,1,1,0,0,1,0,1,0,1,0,0,1,1,0,1,0,1,0,1,0] },
+    { bits:[1,0,1,1,0,0,0,1,0,1,1,0,1,1,0,1,0,0,0,1,0,0,1,1,0,0,0,1,0,1,0,0,1,0,1,1,1,0,0,1,0,1,0,1,1,0,0,0,1] },
+    { bits:[0,0,1,0,1,0,1,1,0,1,0,1,0,0,1,0,1,0,1,0,0,0,0,1,0,1,0,0,1,1,0,1,0,1,1,0,0,1,1,0,0,1,0,1,0,0,1,1,0] },
+    { bits:[1,1,0,0,1,1,0,0,1,0,1,0,1,0,0,1,0,1,0,0,1,0,1,1,0,0,0,1,1,0,0,1,0,0,1,0,1,1,0,1,0,0,1,0,1,1,0,1,0] },
+  ];
+  TOOLS.forEach((t,i) => {
+    const card = document.createElement('div');
+    card.className = 'marker-card';
+    const pat = markerPatterns[i % markerPatterns.length];
+    const cells = pat.bits.map((b,ci) =>
+      `<div class="qr-cell" style="background:${b?'#888888':'#0a0a0a'};opacity:${b?1:.15};animation-delay:${ci*0.02}s"></div>`
+    ).join('');
+    card.innerHTML = `
+      <div class="marker-preview">
+        <div class="marker-qr">${cells}</div>
+      </div>
+      <div class="marker-info">
+        <h4>${t.name}</h4>
+        <p>${t.desc}</p>
+        <span class="marker-download" onclick="downloadMarker(${i})">↓ Descargar marcador</span>
+      </div>
+    `;
+    grid.appendChild(card);
+  });
+}
+
+/* ── DOWNLOAD MARKER (generates canvas PNG) ── */
+window.downloadMarker = function(idx) {
+  const c = document.createElement('canvas'); c.width=512; c.height=512;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle='#000'; ctx.fillRect(0,0,512,512);
+  ctx.strokeStyle='#d0d0d0'; ctx.lineWidth=4;
+  ctx.strokeRect(20,20,472,472);
+
+  const t = TOOLS[idx];
+  ctx.fillStyle='#d0d0d0'; ctx.font='bold 28px monospace';
+  ctx.textAlign='center'; ctx.fillText(t.ref, 256, 480);
+
+  // Simple 7x7 QR-like pattern
+  const markerPatterns = [
+    [0,1,1,1,0,1,0,1,0,1,0,0,0,0,1,0,1,1,0,1,0,1,0,1,0,0,0,1,1,0,0,0,1,0,0,0,0,1,0,0,1,1,1,1,0,1,0,1,0],
+    [1,1,1,0,0,1,0,0,1,0,1,0,0,1,0,0,0,1,1,0,1,0,0,1,0,1,1,0,0,1,0,1,0,1,0,0,1,0,1,1,0,0,1,0,1,1,1,0,1],
+    [0,1,0,1,1,0,1,0,0,0,1,1,0,1,0,0,0,0,1,0,1,1,1,0,0,0,1,0,0,1,1,0,0,1,0,1,0,1,0,0,1,1,0,1,0,1,0,1,0],
+    [1,0,1,1,0,0,0,1,0,1,1,0,1,1,0,1,0,0,0,1,0,0,1,1,0,0,0,1,0,1,0,0,1,0,1,1,1,0,0,1,0,1,0,1,1,0,0,0,1],
+    [0,0,1,0,1,0,1,1,0,1,0,1,0,0,1,0,1,0,1,0,0,0,0,1,0,1,0,0,1,1,0,1,0,1,1,0,0,1,1,0,0,1,0,1,0,0,1,1,0],
+    [1,1,0,0,1,1,0,0,1,0,1,0,1,0,0,1,0,1,0,0,1,0,1,1,0,0,0,1,1,0,0,1,0,0,1,0,1,1,0,1,0,0,1,0,1,1,0,1,0],
+  ];
+  const bits = markerPatterns[idx % markerPatterns.length];
+  const cellSize = 56; const startX=80; const startY=60;
+  bits.forEach((b,ci)=>{
+    const col=ci%7, row=Math.floor(ci/7);
+    ctx.fillStyle=b?'#d0d0d0':'#111';
+    ctx.fillRect(startX+col*cellSize, startY+row*cellSize, cellSize-4, cellSize-4);
+  });
+
+  const a = document.createElement('a');
+  a.download=`marcador-ar-${t.ref}.png`;
+  a.href=c.toDataURL('image/png');
+  a.click();
+};
+
+/* ── AR LAUNCH ── */
+window.launchAR = function() {
+  const tool = TOOLS[window.selectedTool];
+  document.getElementById('arToolName').textContent = tool.name;
+  document.getElementById('ar-overlay').classList.add('active');
+  document.body.style.overflow='hidden';
+  initARScene(tool);
+};
+
+
+
+
+let arScale = 1;
+let arRotationY = 0;
+
+window.arScaleUp = function() { arScale = Math.min(arScale+.2,3); }
+window.arScaleDown = function() { arScale = Math.max(arScale-.2,.2); }
+window.arRotate = function() { arRotationY += Math.PI/2; }
+
+function updateARModel() { /* handled in animation loop */ }
+
+let arRenderer = null, arRAF = null;
+
+function initARScene(tool) {
+  const container = document.getElementById('ar-scene-container');
+  container.innerHTML = '';
+  if(arRenderer){ arRenderer.dispose(); arRenderer = null; }
+  if(arRAF){ cancelAnimationFrame(arRAF); arRAF = null; }
+  arScale = 1; arRotationY = 0;
+  launchBlackBgAR(container, tool);
+}
+
+function launchBlackBgAR(container, tool) {
+  const W = window.innerWidth, H = window.innerHeight;
+
+  arRenderer = new THREE.WebGLRenderer({antialias:true, alpha:false});
+  arRenderer.setSize(W, H);
+  arRenderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  arRenderer.outputColorSpace = THREE.SRGBColorSpace;
+  arRenderer.toneMapping = THREE.ACESFilmicToneMapping;
+  arRenderer.toneMappingExposure = 1.6;
+  arRenderer.setClearColor(0x000000, 1);
+  arRenderer.domElement.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;display:block;';
+  container.appendChild(arRenderer.domElement);
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x000000);
+
+  const camera = new THREE.PerspectiveCamera(50, W/H, 0.1, 200);
+  camera.position.set(0, 1.2, 5);
+
+  /* ── Lights ── */
+  scene.add(new THREE.AmbientLight(0xffffff, 0.2));
+  const keyL = new THREE.DirectionalLight(0xffffff, 3.5); keyL.position.set(4, 6, 5); scene.add(keyL);
+  const fillL = new THREE.DirectionalLight(0xffffff, 0.8); fillL.position.set(-5, 2, -4); scene.add(fillL);
+  const rimL = new THREE.DirectionalLight(0x888888, 1.2); rimL.position.set(0, -4, -5); scene.add(rimL);
+  const pointL = new THREE.PointLight(0xaaaaaa, 2.5, 14); pointL.position.set(-3, 3, 4); scene.add(pointL);
+  const pointL2 = new THREE.PointLight(0x666666, 1.2, 10); pointL2.position.set(3, -2, 3); scene.add(pointL2);
+
+  /* ── Floor plane ── */
+  const floor = new THREE.Mesh(
+    new THREE.CircleGeometry(6, 80),
+    new THREE.MeshStandardMaterial({ color:0x050505, metalness:.95, roughness:.15 })
+  );
+  floor.rotation.x = -Math.PI/2;
+  floor.position.y = -1.8;
+  scene.add(floor);
+
+  /* ── Glowing rings ── */
+  const ring1 = new THREE.Mesh(
+    new THREE.TorusGeometry(1.6, .012, 8, 96),
+    new THREE.MeshStandardMaterial({ color:0xd0d0d0, emissive:0x1a1a1a, transparent:true, opacity:.7 })
+  );
+  ring1.rotation.x = -Math.PI/2; ring1.position.y = -1.78; scene.add(ring1);
+
+  const ring2 = new THREE.Mesh(
+    new THREE.TorusGeometry(2.4, .006, 8, 96),
+    new THREE.MeshStandardMaterial({ color:0xd0d0d0, emissive:0x111111, transparent:true, opacity:.3 })
+  );
+  ring2.rotation.x = -Math.PI/2; ring2.position.y = -1.78; scene.add(ring2);
+
+  /* ── Grid lines on floor ── */
+  const gridHelper = new THREE.GridHelper(12, 20, 0xd0d0d0, 0x001a22);
+  gridHelper.position.y = -1.77;
+  gridHelper.material.transparent = true;
+  gridHelper.material.opacity = 0.25;
+  scene.add(gridHelper);
+
+  /* ── Particles ── */
+  const pArr = [];
+  for(let i=0;i<200;i++) pArr.push((Math.random()-.5)*18, (Math.random()-.5)*14, (Math.random()-.5)*18);
+  const pg = new THREE.BufferGeometry();
+  pg.setAttribute('position', new THREE.Float32BufferAttribute(pArr, 3));
+  const particles = new THREE.Points(pg, new THREE.PointsMaterial({ color:0xd0d0d0, size:.022, transparent:true, opacity:.45 }));
+  scene.add(particles);
+
+  /* ── Ambient scan lines (vertical planes) ── */
+  for(let i=0;i<3;i++){
+    const planeMat = new THREE.MeshBasicMaterial({ color:0xd0d0d0, transparent:true, opacity:.03, side:THREE.DoubleSide });
+    const plane = new THREE.Mesh(new THREE.PlaneGeometry(0.002, 8), planeMat);
+    plane.position.set((i-.5)*3, 0, -2);
+    scene.add(plane);
+  }
+
+  /* ── Tool model ── */
+  const toolGroup = new THREE.Group();
+  const toolMesh = buildGeometry(tool.cat);
+  toolMesh.scale.setScalar(1.1);
+  toolGroup.add(toolMesh);
+  scene.add(toolGroup);
+
+  /* ── Holographic glow sphere under tool ── */
+  const glowSphere = new THREE.Mesh(
+    new THREE.SphereGeometry(.3, 32, 32),
+    new THREE.MeshBasicMaterial({ color:0xd0d0d0, transparent:true, opacity:.06, wireframe:true })
+  );
+  glowSphere.position.y = -1.6;
+  scene.add(glowSphere);
+
+  /* ── Shadow circle projection ── */
+  const shadow = new THREE.Mesh(
+    new THREE.CircleGeometry(.6, 32),
+    new THREE.MeshBasicMaterial({ color:0xd0d0d0, transparent:true, opacity:.12 })
+  );
+  shadow.rotation.x = -Math.PI/2; shadow.position.y = -1.76;
+  scene.add(shadow);
+
+  /* ── Touch/mouse drag to rotate ── */
+  let isDragging = false, lastX = 0;
+  const canvas = arRenderer.domElement;
+  canvas.addEventListener('mousedown', e => { isDragging=true; lastX=e.clientX; });
+  canvas.addEventListener('mousemove', e => { if(isDragging){ toolGroup.rotation.y += (e.clientX - lastX)*.008; lastX=e.clientX; }});
+  canvas.addEventListener('mouseup', ()=>isDragging=false);
+  canvas.addEventListener('touchstart', e => { isDragging=true; lastX=e.touches[0].clientX; }, {passive:true});
+  canvas.addEventListener('touchmove', e => { if(isDragging){ toolGroup.rotation.y += (e.touches[0].clientX - lastX)*.008; lastX=e.touches[0].clientX; }}, {passive:true});
+  canvas.addEventListener('touchend', ()=>isDragging=false);
+
+  /* ── Resize handler ── */
+  const onResize = () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    arRenderer.setSize(window.innerWidth, window.innerHeight);
+  };
+  window.addEventListener('resize', onResize);
+  container._cleanup = () => { window.removeEventListener('resize', onResize); };
+
+  /* ── Animate ── */
+  let t = 0;
+  (function loop(){
+    arRAF = requestAnimationFrame(loop);
+    t += .016;
+
+    // Auto-rotate if not dragging
+    if(!isDragging) toolGroup.rotation.y += .008;
+    // Subtle float
+    toolGroup.position.y = Math.sin(t*.6) * .12;
+
+    ring1.rotation.z += .003;
+    ring2.rotation.z -= .002;
+    particles.rotation.y += .0005;
+    glowSphere.rotation.y += .02; glowSphere.rotation.x += .01;
+
+    // Pulsing shadow
+    const pulse = .85 + Math.sin(t*1.2)*.15;
+    shadow.scale.set(pulse, pulse, pulse);
+    shadow.material.opacity = .08 + Math.sin(t*1.2)*.06;
+
+    // Apply external scale/rotation from controls
+    toolGroup.scale.setScalar(arScale);
+    toolGroup.rotation.y += arRotationY * .1;
+    if(Math.abs(arRotationY) > 0.001) arRotationY *= .85; else arRotationY = 0;
+
+    arRenderer.render(scene, camera);
+  })();
+}
+
+window.closeAR = function() {
+  document.getElementById('ar-overlay').classList.remove('active');
+  document.body.style.overflow='';
+  if(arRAF){ cancelAnimationFrame(arRAF); arRAF=null; }
+  if(arRenderer){ arRenderer.dispose(); arRenderer=null; }
+  const container = document.getElementById('ar-scene-container');
+  if(container._cleanup) container._cleanup();
+  container.innerHTML='';
+};
+
+/* ── SCROLL REVEAL ── */
+const revealObserver = new IntersectionObserver((entries)=>{
+  entries.forEach(e=>{ if(e.isIntersecting) e.target.classList.add('visible'); });
+},{threshold:.1, rootMargin:'0px 0px -60px 0px'});
+document.querySelectorAll('.reveal').forEach(el=>revealObserver.observe(el));
+
+
+
+/* ── INIT ── */
+window.addEventListener('load',()=>{
+  populateToolPicker();
+  populateMarkers();
+  setTimeout(initPreviewScene, 200);
+});
+</script>
+
+</body>
+</html>
